@@ -67,10 +67,10 @@ static void MX_TIM15_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-uint8_t run(uint32_t time_acs_ms, uint16_t velocity /*imp/sec*/, TIM_TypeDef * TimX, TIM_HandleTypeDef *htim, uint32_t Channel1, uint32_t Channel2, uint32_t coordinate /*add*/);
+uint8_t run(uint32_t time_acs_ms, uint16_t velocity /*imp/sec*/, TIM_TypeDef * TimX, TIM_HandleTypeDef *htim, uint32_t Channel1, uint32_t Channel2, uint32_t coordinate /*add*/, GPIO_TypeDef * SwitchPort, uint16_t SwitchPin);
 uint8_t direction(uint8_t axis /*0-x 1-y*/, uint8_t dir);
 uint8_t scan(uint32_t width, uint32_t height, uint8_t N);
-uint8_t homing(TIM_TypeDef * TimX, TIM_HandleTypeDef *htim, uint32_t Channel1, uint32_t Channel2);
+uint8_t homing(TIM_TypeDef * TimX, TIM_HandleTypeDef *htim, uint32_t Channel1, uint32_t Channel2, GPIO_TypeDef * SwitchPort, uint16_t SwitchPin);
 /* USER CODE END 0 */
 
 /**
@@ -110,6 +110,9 @@ int main(void)
   TIM15->BDTR |= TIM_BDTR_MOE;
   HAL_TIM_PWM_Stop(&htim15, TIM_CHANNEL_1);
   HAL_TIM_PWM_Stop(&htim15, TIM_CHANNEL_2);
+  homing(TIM15, &htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, GPIOA, GPIO_PIN_10);
+  direction(Y, pos);
+  run(100, 5000, TIM15, &htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, 8000, GPIOA, GPIO_PIN_10);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -117,14 +120,19 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-	  direction(X, pos);
-	  run(200, 3000, TIM15, &htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, 8000);
-	  //run(time_acs_ms, velocity, TimX, htim, Channel1, Channel2, coordinate)
 
-	  direction(X, neg);
-	  run(200, 3000, TIM15, &htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, 8000);
-	  scan(8000, 700, 5);
     /* USER CODE BEGIN 3 */
+	/*direction(X, pos);
+	run(200, 3000, TIM15, &htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, 8000);
+	//run(time_acs_ms, velocity, TimX, htim, Channel1, Channel2, coordinate)
+
+	direction(X, neg);
+	run(200, 3000, TIM15, &htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, 8000);
+	scan(8000, 700, 5);*/
+	if(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_10) == GPIO_PIN_SET){
+		HAL_GPIO_TogglePin(LD4_GPIO_Port, LD4_Pin);
+		HAL_Delay(1000);
+	}
   }
   /* USER CODE END 3 */
 }
@@ -406,28 +414,31 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOE_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(PF2_unk_GPIO_Port, PF2_unk_Pin, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, DIR1_Pin|DIR2_Pin|PA10_unk_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, DIR1_Pin|DIR2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOE, LD4_Pin|LD5_Pin|LD7_Pin|LD9_Pin
                           |LD10_Pin|LD8_Pin|LD6_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : PF2_unk_Pin */
-  GPIO_InitStruct.Pin = PF2_unk_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(PF2_unk_GPIO_Port, &GPIO_InitStruct);
+  /*Configure GPIO pin : PF2 */
+  GPIO_InitStruct.Pin = GPIO_PIN_2;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : DIR1_Pin DIR2_Pin PA10_unk_Pin */
-  GPIO_InitStruct.Pin = DIR1_Pin|DIR2_Pin|PA10_unk_Pin;
+  /*Configure GPIO pin : DIR1_Pin */
+  GPIO_InitStruct.Pin = DIR1_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(DIR1_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : DIR2_Pin */
+  GPIO_InitStruct.Pin = DIR2_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+  HAL_GPIO_Init(DIR2_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : LD4_Pin LD5_Pin LD7_Pin LD9_Pin
                            LD10_Pin LD8_Pin LD6_Pin */
@@ -438,13 +449,19 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
+  /*Configure GPIO pin : PA10 */
+  GPIO_InitStruct.Pin = GPIO_PIN_10;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
   /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
-uint8_t run(uint32_t time_acs_ms, uint16_t velocity /*imp/sec*/, TIM_TypeDef * TimX, TIM_HandleTypeDef *htim, uint32_t Channel1, uint32_t Channel2, uint32_t coordinate /*add*/){
+uint8_t run(uint32_t time_acs_ms, uint16_t velocity /*imp/sec*/, TIM_TypeDef * TimX, TIM_HandleTypeDef *htim, uint32_t Channel1, uint32_t Channel2, uint32_t coordinate /*add*/, GPIO_TypeDef * SwitchPort, uint16_t SwitchPin){
 	//РАЗГОН
 	//уставка для счетчика
 	uint16_t SP = 1000000/velocity;//частота инкреммента / скорость
@@ -465,7 +482,7 @@ uint8_t run(uint32_t time_acs_ms, uint16_t velocity /*imp/sec*/, TIM_TypeDef * T
 	HAL_TIM_PWM_Start(htim, Channel1);
 	HAL_TIM_PWM_Start(htim, Channel2);
 	if (coordinate >= acs_dist + deacs_dist){
-		while(step_counter != acs_dist/*TimX -> ARR != SP*/){ // пока period != уставке
+		while(step_counter != acs_dist/*TimX -> ARR != SP*/ && HAL_GPIO_ReadPin(SwitchPort, SwitchPin) != GPIO_PIN_SET){ // пока period != уставке
 			if (TimX->SR & TIM_SR_UIF)
 			{
 				TimX->SR &= ~TIM_SR_UIF; //сброс флага прерывания
@@ -478,14 +495,14 @@ uint8_t run(uint32_t time_acs_ms, uint16_t velocity /*imp/sec*/, TIM_TypeDef * T
 				TimX -> ARR = SP;
 			}
 		}
-		while(step_counter != coordinate - deacs_dist){
+		while(step_counter != coordinate - deacs_dist && HAL_GPIO_ReadPin(SwitchPort, SwitchPin) != GPIO_PIN_SET){
 			if (TimX->SR & TIM_SR_UIF)
 			{
 				TimX->SR &= ~TIM_SR_UIF; //сброс флага прерывания
 				step_counter++;
 			}
 		}
-		while(step_counter != coordinate){
+		while(step_counter != coordinate && HAL_GPIO_ReadPin(SwitchPort, SwitchPin) != GPIO_PIN_SET){
 			if (TimX->SR & TIM_SR_UIF)
 			{
 				TimX->SR &= ~TIM_SR_UIF; //сброс флага прерывания
@@ -500,7 +517,8 @@ uint8_t run(uint32_t time_acs_ms, uint16_t velocity /*imp/sec*/, TIM_TypeDef * T
 		}
 		HAL_TIM_PWM_Stop(htim, Channel1);
 		HAL_TIM_PWM_Stop(htim, Channel2);
-		return 1;
+		if (HAL_GPIO_ReadPin(SwitchPort, SwitchPin) == GPIO_PIN_SET) return 1;
+		if (HAL_GPIO_ReadPin(SwitchPort, SwitchPin) == GPIO_PIN_SET) return 0;
 	}else{
 		return 0;
 	}
@@ -523,7 +541,7 @@ uint8_t direction(uint8_t axis /*0-x 1-y*/, uint8_t dir){
 		HAL_GPIO_WritePin(DIR2_GPIO_Port, DIR2_Pin, GPIO_PIN_SET);
 	}
 }
-uint8_t scan(uint32_t width, uint32_t height, uint8_t N){
+/*uint8_t scan(uint32_t width, uint32_t height, uint8_t N){
 	for(uint8_t i = 0; i <= N; i++){
 		direction(X, pos);
 		run(250, 2500, TIM15, &htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, width);
@@ -534,9 +552,9 @@ uint8_t scan(uint32_t width, uint32_t height, uint8_t N){
 		direction(Y, pos);
 		run(250, 2500, TIM15, &htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, height);
 	}
-}
+}*/
 
-uint8_t homing(TIM_TypeDef * TimX, TIM_HandleTypeDef *htim, uint32_t Channel1, uint32_t Channel2){
+uint8_t homing(TIM_TypeDef * TimX, TIM_HandleTypeDef *htim, uint32_t Channel1, uint32_t Channel2, GPIO_TypeDef * SwitchPort, uint16_t SwitchPin){
 	uint32_t step_counter = 0;
 	TimX -> ARR  = 5000;
 	TimX -> CCR1 = 2500/2; // Скважность по первому каналу 50%
@@ -545,7 +563,19 @@ uint8_t homing(TIM_TypeDef * TimX, TIM_HandleTypeDef *htim, uint32_t Channel1, u
 	direction(X, neg);
 	HAL_TIM_PWM_Start(htim, Channel1);
 	HAL_TIM_PWM_Start(htim, Channel2);
-	//ВСТАВИТЬ УЛОВИЕ ТОГО, ЧТО ОН ДОЕХАЛ ДО концевика по оси X while();
+	while(HAL_GPIO_ReadPin(SwitchPort, SwitchPin) != GPIO_PIN_SET && step_counter < 8000){
+		if (TimX->SR & TIM_SR_UIF)
+		{
+			TimX->SR &= ~TIM_SR_UIF; //сброс флага прерывания
+			step_counter++;
+		}
+	}
+	if (step_counter >= 8000){
+		HAL_TIM_PWM_Stop(htim, Channel1);
+		HAL_TIM_PWM_Stop(htim, Channel2);
+		Error_Handler();
+	}
+	step_counter = 0;
 	HAL_TIM_PWM_Stop(htim, Channel1);
 	HAL_TIM_PWM_Stop(htim, Channel2);
 	HAL_Delay(100);
@@ -568,10 +598,22 @@ uint8_t homing(TIM_TypeDef * TimX, TIM_HandleTypeDef *htim, uint32_t Channel1, u
 	direction(Y, neg);
 	HAL_TIM_PWM_Start(htim, Channel1);
 	HAL_TIM_PWM_Start(htim, Channel2);
-	//ВСТАВИТЬ УЛОВИЕ ТОГО, ЧТО ОН ДОЕХАЛ ДО концевика по оси Y while();
+	while(HAL_GPIO_ReadPin(SwitchPort, SwitchPin) != GPIO_PIN_SET && step_counter < 8000){
+		if (TimX->SR & TIM_SR_UIF)
+		{
+			TimX->SR &= ~TIM_SR_UIF; //сброс флага прерывания
+			step_counter++;
+		}
+	}
+	if (step_counter >= 8000){
+		HAL_TIM_PWM_Stop(htim, Channel1);
+		HAL_TIM_PWM_Stop(htim, Channel2);
+		Error_Handler();
+	}
 	HAL_TIM_PWM_Stop(htim, Channel1);
 	HAL_TIM_PWM_Stop(htim, Channel2);
 	HAL_Delay(100);
+	step_counter = 0;
 	direction(Y, pos);
 	HAL_TIM_PWM_Start(htim, Channel1);
 	HAL_TIM_PWM_Start(htim, Channel2);
@@ -584,6 +626,7 @@ uint8_t homing(TIM_TypeDef * TimX, TIM_HandleTypeDef *htim, uint32_t Channel1, u
 	}
 	HAL_TIM_PWM_Stop(htim, Channel1);
 	HAL_TIM_PWM_Stop(htim, Channel2);
+	return 1;
 }
 /* USER CODE END 4 */
 
