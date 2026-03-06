@@ -48,6 +48,8 @@ SPI_HandleTypeDef hspi1;
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim15;
 
+UART_HandleTypeDef huart4;
+
 PCD_HandleTypeDef hpcd_USB_FS;
 
 /* USER CODE BEGIN PV */
@@ -61,6 +63,7 @@ static void MX_SPI1_Init(void);
 static void MX_USB_PCD_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_TIM15_Init(void);
+static void MX_UART4_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -71,6 +74,21 @@ uint8_t run(uint32_t time_acs_ms, uint16_t velocity /*imp/sec*/, TIM_TypeDef * T
 uint8_t direction(uint8_t axis /*0-x 1-y*/, uint8_t dir);
 uint8_t scan(uint32_t width, uint32_t height, uint8_t N);
 uint8_t homing(TIM_TypeDef * TimX, TIM_HandleTypeDef *htim, uint32_t Channel1, uint32_t Channel2, GPIO_TypeDef * SwitchPort, uint16_t SwitchPin);
+cmd_uart RS485_TRANSMITTER ={0};
+uint8_t rx_buffer;
+uint16_t crc;
+typedef struct{
+	uint16_t velocity;
+	uint16_t time_acs;
+	uint16_t coordinate;
+	uint8_t axis;
+	uint8_t dir;
+	uint16_t width;
+	uint16_t height;
+	uint8_t step_number;
+	uint16_t status;
+}station;
+uint8_t proceed(station * structure, cmd_uart * RS485_structure);
 /* USER CODE END 0 */
 
 /**
@@ -106,13 +124,15 @@ int main(void)
   MX_USB_PCD_Init();
   MX_TIM1_Init();
   MX_TIM15_Init();
+  MX_UART4_Init();
   /* USER CODE BEGIN 2 */
   TIM15->BDTR |= TIM_BDTR_MOE;
   HAL_TIM_PWM_Stop(&htim15, TIM_CHANNEL_1);
   HAL_TIM_PWM_Stop(&htim15, TIM_CHANNEL_2);
-  homing(TIM15, &htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, GPIOA, GPIO_PIN_10);
+  HAL_UART_Receive_IT(&huart4, &rx_buffer, 1);
+  //homing(TIM15, &htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, GPIOA, GPIO_PIN_10);
   direction(Y, pos);
-  run(100, 5000, TIM15, &htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, 8000, GPIOA, GPIO_PIN_10);
+  //run(100, 5000, TIM15, &htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, 8000, GPIOA, GPIO_PIN_10);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -129,9 +149,17 @@ int main(void)
 	direction(X, neg);
 	run(200, 3000, TIM15, &htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, 8000);
 	scan(8000, 700, 5);*/
-	if(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_10) == GPIO_PIN_SET){
+	/*if(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_10) == GPIO_PIN_SET){
 		HAL_GPIO_TogglePin(LD4_GPIO_Port, LD4_Pin);
 		HAL_Delay(1000);
+	}*/
+	if(RS485_TRANSMITTER.data_update == 1){//проверяем флаг апдейта
+		crc = (RS485_TRANSMITTER.CRC16[1] << 8) + RS485_TRANSMITTER.CRC16[0];
+		if(CRC16_calc(RS485_TRANSMITTER.frame, 7) == crc){
+			HAL_UART_Transmit(&huart4, RS485_TRANSMITTER.frame, 9, HAL_MAX_DELAY);
+		}else{
+			Error_Handler();
+		}
 	}
   }
   /* USER CODE END 3 */
@@ -175,7 +203,9 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USB|RCC_PERIPHCLK_TIM1;
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USB|RCC_PERIPHCLK_UART4
+                              |RCC_PERIPHCLK_TIM1;
+  PeriphClkInit.Uart4ClockSelection = RCC_UART4CLKSOURCE_PCLK1;
   PeriphClkInit.USBClockSelection = RCC_USBCLKSOURCE_PLL;
   PeriphClkInit.Tim1ClockSelection = RCC_TIM1CLK_HCLK;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
@@ -361,6 +391,41 @@ static void MX_TIM15_Init(void)
 
   /* USER CODE END TIM15_Init 2 */
   HAL_TIM_MspPostInit(&htim15);
+
+}
+
+/**
+  * @brief UART4 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_UART4_Init(void)
+{
+
+  /* USER CODE BEGIN UART4_Init 0 */
+
+  /* USER CODE END UART4_Init 0 */
+
+  /* USER CODE BEGIN UART4_Init 1 */
+
+  /* USER CODE END UART4_Init 1 */
+  huart4.Instance = UART4;
+  huart4.Init.BaudRate = 9600;
+  huart4.Init.WordLength = UART_WORDLENGTH_8B;
+  huart4.Init.StopBits = UART_STOPBITS_1;
+  huart4.Init.Parity = UART_PARITY_NONE;
+  huart4.Init.Mode = UART_MODE_TX_RX;
+  huart4.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart4.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart4.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart4.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+  if (HAL_UART_Init(&huart4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN UART4_Init 2 */
+
+  /* USER CODE END UART4_Init 2 */
 
 }
 
@@ -557,8 +622,8 @@ uint8_t direction(uint8_t axis /*0-x 1-y*/, uint8_t dir){
 uint8_t homing(TIM_TypeDef * TimX, TIM_HandleTypeDef *htim, uint32_t Channel1, uint32_t Channel2, GPIO_TypeDef * SwitchPort, uint16_t SwitchPin){
 	uint32_t step_counter = 0;
 	TimX -> ARR  = 5000;
-	TimX -> CCR1 = 2500/2; // Скважность по первому каналу 50%
-	TimX -> CCR2 = 2500/2; // Скважность по второму каналу 50%
+	TimX -> CCR1 = 2500; // Скважность по первому каналу 50%
+	TimX -> CCR2 = 2500; // Скважность по второму каналу 50%
 	//запуск движения к точке (0;0)
 	direction(X, neg);
 	HAL_TIM_PWM_Start(htim, Channel1);
@@ -627,6 +692,112 @@ uint8_t homing(TIM_TypeDef * TimX, TIM_HandleTypeDef *htim, uint32_t Channel1, u
 	HAL_TIM_PWM_Stop(htim, Channel1);
 	HAL_TIM_PWM_Stop(htim, Channel2);
 	return 1;
+}
+uint16_t CRC16_calc(uint8_t* data, size_t length) {
+    uint16_t crc = 0x0000; // Начальное значение (может быть 0xFFFF)
+
+    for (size_t i = 0; i < length; i++) {
+        // XOR текущего байта со старшим байтом CRC
+        crc ^= ((uint16_t)data[i] << 8);
+
+        // Обрабатываем каждый бит байта
+        for (int bit = 0; bit < 8; bit++) {
+            if (crc & 0x8000) {
+                // Если старший бит = 1, сдвигаем и XOR с полиномом
+                crc = (crc << 1) ^ 0x8005;
+            } else {
+                // Иначе просто сдвигаем
+                crc <<= 1;
+            }
+        }
+    }
+
+    return crc;
+}
+uint8_t DataRecive(cmd_uart* structure, uint8_t symbol){
+	//прием байта адреса устройства
+	structure->frame[structure->ccnt] = symbol;
+	if (structure->ccnt == 0){
+		structure->dev_addr = symbol;
+	}
+	//прием двух байт команды
+	if (structure -> ccnt == 1){
+		structure->cmd[0] = symbol;
+	}
+	if (structure -> ccnt == 2){
+		structure->cmd[1] = symbol;
+	}
+	//прием двух байт адреса регистра
+	if (structure -> ccnt == 3){
+		structure-> reg[0] = symbol;
+	}
+	if (structure -> ccnt == 4){
+		structure-> reg[1] = symbol;
+	}
+	//прием двух байт данных
+	if (structure -> ccnt == 5){
+		structure-> value[0] = symbol;
+	}
+	if (structure -> ccnt == 6){
+		structure-> value[1] = symbol;
+	}
+	//прием CRC
+	if (structure -> ccnt == 7){
+		structure-> CRC16[0] = symbol;
+	}
+	if (structure -> ccnt == 8){
+		structure-> CRC16[1] = symbol;
+	}
+	structure->ccnt++;
+	if(structure->ccnt == 9) {
+		structure->ccnt = 0;
+		structure->data_update = 1;
+	}
+}
+uint8_t proceed(station * station_structure, cmd_uart * RS485_structure){
+	if(RS485_structure->dev_addr == 52){
+		if(RS485_structure ->cmd[0] == 0){ //проверяем первый 0
+			if(RS485_structure ->cmd[1] == 1){ //запись
+				if(RS485_structure->reg[0] == 0){ //проверяем, что первый 0 в адресе регистра
+					switch(RS485_structure->reg[1]){
+					case 1:
+						station_structure->velocity = (RS485_TRANSMITTER.value[1] << 8) + RS485_TRANSMITTER.value[0];
+					case 2:
+						station_structure->time_acs = (RS485_TRANSMITTER.value[1] << 8) + RS485_TRANSMITTER.value[0];
+					case 3:
+						station_structure->coordinate = (RS485_TRANSMITTER.value[1] << 8) + RS485_TRANSMITTER.value[0];
+					case 4:
+						station_structure->status = 1;
+						homing(TIM15, &htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, GPIOA, GPIO_PIN_10);
+						station_structure->status = 0;
+					case 7:
+						station_structure->axis = (RS485_TRANSMITTER.value[1]);
+						station_structure->dir = (RS485_TRANSMITTER.value[0]);
+					case 8:
+						station_structure->status = 1;
+						direction(station_structure->axis, station_structure->dir);
+						run(station_structure->time_acs, station_structure->velocity, TIM15, &htim15 , TIM_CHANNEL_1, TIM_CHANNEL_2, station_structure->coordinate, GPIOA, GPIO_PIN_10);
+						station_structure->status = 0;
+					}
+				}
+				if(RS485_structure->reg[0] == 1){
+					switch(RS485_structure->reg[1]){
+					case 0:
+						station_structure->width = (RS485_TRANSMITTER.value[1] << 8) + RS485_TRANSMITTER.value[0];
+					case 1:
+						station_structure->height = (RS485_TRANSMITTER.value[1] << 8) + RS485_TRANSMITTER.value[0];
+					case 2:
+						station_structure-> step_number = RS485_TRANSMITTER.value[0];
+					case 3:
+						Error_Handler();
+					}
+				}
+			}
+			if(RS485_structure ->cmd[1] == 4){ //чтение
+
+			}
+		}
+	}
 }
 /* USER CODE END 4 */
 

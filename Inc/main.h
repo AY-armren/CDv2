@@ -95,7 +95,20 @@ void Error_Handler(void);
 #define SWCLK_GPIO_Port GPIOA
 
 /* USER CODE BEGIN Private defines */
-
+//инициализация всего того, что будет происходить в прерываниях
+typedef struct{
+	uint8_t ccnt;
+	uint8_t dev_addr;
+	uint8_t cmd[2];
+	uint8_t reg[2];
+	uint8_t value[2];
+	uint8_t CRC16[2];
+	uint8_t data_update; // апдейт данных
+	uint8_t frame[9];
+}cmd_uart;
+extern cmd_uart RS485_TRANSMITTER;
+uint16_t CRC16_calc(uint8_t* data, size_t length);
+uint8_t DataRecive(cmd_uart* structure, uint8_t symbol);
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus
