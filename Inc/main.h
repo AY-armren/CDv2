@@ -109,6 +109,18 @@ typedef struct{
 extern cmd_uart RS485_TRANSMITTER;
 uint16_t CRC16_calc(uint8_t* data, size_t length);
 uint8_t DataRecive(cmd_uart* structure, uint8_t symbol);
+typedef struct{
+	uint16_t velocity;
+	uint16_t time_acs;
+	uint16_t coordinate;
+	uint8_t axis;
+	uint8_t dir;
+	uint16_t width;
+	uint16_t height;
+	uint8_t step_number;
+	uint16_t status;
+}station;
+extern station station_struct;
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

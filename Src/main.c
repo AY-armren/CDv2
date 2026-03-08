@@ -77,18 +77,9 @@ uint8_t homing(TIM_TypeDef * TimX, TIM_HandleTypeDef *htim, uint32_t Channel1, u
 cmd_uart RS485_TRANSMITTER ={0};
 uint8_t rx_buffer;
 uint16_t crc;
-typedef struct{
-	uint16_t velocity;
-	uint16_t time_acs;
-	uint16_t coordinate;
-	uint8_t axis;
-	uint8_t dir;
-	uint16_t width;
-	uint16_t height;
-	uint8_t step_number;
-	uint16_t status;
-}station;
+station station_struct = {0};
 uint8_t proceed(station * structure, cmd_uart * RS485_structure);
+uint8_t newline_char = '\n';
 /* USER CODE END 0 */
 
 /**
@@ -155,10 +146,15 @@ int main(void)
 	}*/
 	if(RS485_TRANSMITTER.data_update == 1){//проверяем флаг апдейта
 		crc = (RS485_TRANSMITTER.CRC16[1] << 8) + RS485_TRANSMITTER.CRC16[0];
-		if(CRC16_calc(RS485_TRANSMITTER.frame, 7) == crc){
+		if(/*CRC16_calc(RS485_TRANSMITTER.frame, 7) == crc*/ RS485_TRANSMITTER.CRC16[1] == 1 && RS485_TRANSMITTER.CRC16[1] == 1){
 			HAL_UART_Transmit(&huart4, RS485_TRANSMITTER.frame, 9, HAL_MAX_DELAY);
+			proceed(&station_struct, &RS485_TRANSMITTER);
+			RS485_TRANSMITTER.data_update = 0;
+			HAL_UART_Transmit(&huart4, RS485_TRANSMITTER.frame, 9, HAL_MAX_DELAY);
+			HAL_UART_Transmit(&huart4, &newline_char, 1, HAL_MAX_DELAY);
 		}else{
-			Error_Handler();
+			RS485_TRANSMITTER.data_update = 0;
+			//Error_Handler();
 		}
 	}
   }
@@ -753,6 +749,7 @@ uint8_t DataRecive(cmd_uart* structure, uint8_t symbol){
 		structure->ccnt = 0;
 		structure->data_update = 1;
 	}
+	return 1;
 }
 uint8_t proceed(station * station_structure, cmd_uart * RS485_structure){
 	if(RS485_structure->dev_addr == 52){
@@ -761,40 +758,55 @@ uint8_t proceed(station * station_structure, cmd_uart * RS485_structure){
 				if(RS485_structure->reg[0] == 0){ //проверяем, что первый 0 в адресе регистра
 					switch(RS485_structure->reg[1]){
 					case 1:
-						station_structure->velocity = (RS485_TRANSMITTER.value[1] << 8) + RS485_TRANSMITTER.value[0];
+						station_structure->velocity = RS485_TRANSMITTER.value[1] + (RS485_TRANSMITTER.value[0] * 100);
+						break;
 					case 2:
-						station_structure->time_acs = (RS485_TRANSMITTER.value[1] << 8) + RS485_TRANSMITTER.value[0];
+						station_structure->time_acs = RS485_TRANSMITTER.value[1] + (RS485_TRANSMITTER.value[0] * 100);
+						break;
 					case 3:
-						station_structure->coordinate = (RS485_TRANSMITTER.value[1] << 8) + RS485_TRANSMITTER.value[0];
+						station_structure->coordinate = RS485_TRANSMITTER.value[1] + (RS485_TRANSMITTER.value[0] * 100);
+						break;
 					case 4:
 						station_structure->status = 1;
 						homing(TIM15, &htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, GPIOA, GPIO_PIN_10);
 						station_structure->status = 0;
+						break;
 					case 7:
 						station_structure->axis = (RS485_TRANSMITTER.value[1]);
 						station_structure->dir = (RS485_TRANSMITTER.value[0]);
+						break;
 					case 8:
 						station_structure->status = 1;
 						direction(station_structure->axis, station_structure->dir);
+						station_structure->coordinate = RS485_TRANSMITTER.value[1] + (RS485_TRANSMITTER.value[0] * 100);
 						run(station_structure->time_acs, station_structure->velocity, TIM15, &htim15 , TIM_CHANNEL_1, TIM_CHANNEL_2, station_structure->coordinate, GPIOA, GPIO_PIN_10);
 						station_structure->status = 0;
+						break;
 					}
 				}
 				if(RS485_structure->reg[0] == 1){
 					switch(RS485_structure->reg[1]){
 					case 0:
-						station_structure->width = (RS485_TRANSMITTER.value[1] << 8) + RS485_TRANSMITTER.value[0];
+						station_structure->width = RS485_TRANSMITTER.value[1] + (RS485_TRANSMITTER.value[0] * 100);
+						break;
 					case 1:
-						station_structure->height = (RS485_TRANSMITTER.value[1] << 8) + RS485_TRANSMITTER.value[0];
+						station_structure->height = RS485_TRANSMITTER.value[1] + (RS485_TRANSMITTER.value[0] * 100);
+						break;
 					case 2:
 						station_structure-> step_number = RS485_TRANSMITTER.value[0];
+						break;
 					case 3:
 						Error_Handler();
+						break;
 					}
 				}
 			}
 			if(RS485_structure ->cmd[1] == 4){ //чтение
+				switch(RS485_structure->reg[1]){
+				case 1:
 
+				break;
+				}
 			}
 		}
 	}
