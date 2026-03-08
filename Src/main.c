@@ -70,15 +70,10 @@ static void MX_UART4_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-uint8_t run(uint32_t time_acs_ms, uint16_t velocity /*imp/sec*/, TIM_TypeDef * TimX, TIM_HandleTypeDef *htim, uint32_t Channel1, uint32_t Channel2, uint32_t coordinate /*add*/, GPIO_TypeDef * SwitchPort, uint16_t SwitchPin);
-uint8_t direction(uint8_t axis /*0-x 1-y*/, uint8_t dir);
-uint8_t scan(uint32_t width, uint32_t height, uint8_t N);
-uint8_t homing(TIM_TypeDef * TimX, TIM_HandleTypeDef *htim, uint32_t Channel1, uint32_t Channel2, GPIO_TypeDef * SwitchPort, uint16_t SwitchPin);
 cmd_uart RS485_TRANSMITTER ={0};
 uint8_t rx_buffer;
 uint16_t crc;
 station station_struct = {0};
-uint8_t proceed(station * structure, cmd_uart * RS485_structure);
 uint8_t newline_char = '\n';
 /* USER CODE END 0 */
 
@@ -144,19 +139,7 @@ int main(void)
 		HAL_GPIO_TogglePin(LD4_GPIO_Port, LD4_Pin);
 		HAL_Delay(1000);
 	}*/
-	if(RS485_TRANSMITTER.data_update == 1){//проверяем флаг апдейта
-		crc = (RS485_TRANSMITTER.CRC16[1] << 8) + RS485_TRANSMITTER.CRC16[0];
-		if(/*CRC16_calc(RS485_TRANSMITTER.frame, 7) == crc*/ RS485_TRANSMITTER.CRC16[1] == 1 && RS485_TRANSMITTER.CRC16[1] == 1){
-			HAL_UART_Transmit(&huart4, RS485_TRANSMITTER.frame, 9, HAL_MAX_DELAY);
-			proceed(&station_struct, &RS485_TRANSMITTER);
-			RS485_TRANSMITTER.data_update = 0;
-			HAL_UART_Transmit(&huart4, RS485_TRANSMITTER.frame, 9, HAL_MAX_DELAY);
-			HAL_UART_Transmit(&huart4, &newline_char, 1, HAL_MAX_DELAY);
-		}else{
-			RS485_TRANSMITTER.data_update = 0;
-			//Error_Handler();
-		}
-	}
+
   }
   /* USER CODE END 3 */
 }
@@ -752,6 +735,7 @@ uint8_t DataRecive(cmd_uart* structure, uint8_t symbol){
 	return 1;
 }
 uint8_t proceed(station * station_structure, cmd_uart * RS485_structure){
+	uint8_t message[9] = {0};
 	if(RS485_structure->dev_addr == 52){
 		if(RS485_structure ->cmd[0] == 0){ //проверяем первый 0
 			if(RS485_structure ->cmd[1] == 1){ //запись
@@ -800,13 +784,47 @@ uint8_t proceed(station * station_structure, cmd_uart * RS485_structure){
 						break;
 					}
 				}
+				HAL_UART_Transmit(&huart4, RS485_TRANSMITTER.frame, 9, HAL_MAX_DELAY);
+				HAL_UART_Transmit(&huart4, &newline_char, 1, HAL_MAX_DELAY);
 			}
 			if(RS485_structure ->cmd[1] == 4){ //чтение
+				memcpy(message, RS485_structure->frame, sizeof(RS485_structure->frame)); //в тупую присваиваем значение фрейма потом будет редачить данные
 				switch(RS485_structure->reg[1]){
 				case 1:
-
+					message[5] = station_structure->velocity/100;
+					message[6] = station_structure->velocity%100;
+				break;
+				case 2:
+					message[5] = station_structure->time_acs/100;
+					message[6] = station_structure->time_acs%100;
+				break;
+				case 5:
+					message[5] = 0;
+					if(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_10) == GPIO_PIN_SET){
+						message[6] = 1;
+					}else{
+						message[6] = 0;
+					}
+				break;
+				case 7:
+					message[5] = station_structure->axis;
+					message[6] = station_structure->dir;
+				break;
+				case 10:
+					message[5] = station_structure->height/100;
+					message[6] = station_structure->height%100;
+				break;
+				case 11:
+					message[5] = station_structure->width/100;
+					message[6] = station_structure->width%100;
+				break;
+				case 12:
+					message[5] = station_structure->step_number/100;
+					message[6] = station_structure->step_number%100;
 				break;
 				}
+				HAL_UART_Transmit(&huart4, message, 9, HAL_MAX_DELAY);
+				HAL_UART_Transmit(&huart4, &newline_char, 1, HAL_MAX_DELAY);
 			}
 		}
 	}

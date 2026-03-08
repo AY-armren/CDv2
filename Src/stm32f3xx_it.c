@@ -205,7 +205,18 @@ void UART4_IRQHandler(void)
 {
   /* USER CODE BEGIN UART4_IRQn 0 */
   uint8_t received_char = (uint8_t)(UART4-> RDR  & 0xFF);
-  DataRecive(&RS485_TRANSMITTER, received_char);
+  DataRecive(&RS485_TRANSMITTER, received_char);//выполняем заполнение команды
+  if(RS485_TRANSMITTER.data_update == 1){//проверяем флаг апдейта
+	crc = (RS485_TRANSMITTER.CRC16[1] * 100) + RS485_TRANSMITTER.CRC16[0];
+	if(/*CRC16_calc(RS485_TRANSMITTER.frame, 7) == crc*/ RS485_TRANSMITTER.CRC16[1] == 1 && RS485_TRANSMITTER.CRC16[1] == 1){
+		HAL_UART_Transmit(&huart4, RS485_TRANSMITTER.frame, 9, HAL_MAX_DELAY);
+		proceed(&station_struct, &RS485_TRANSMITTER);
+		RS485_TRANSMITTER.data_update = 0;
+	}else{
+		RS485_TRANSMITTER.data_update = 0;
+		//Error_Handler();
+	}
+  }
   /* USER CODE END UART4_IRQn 0 */
   HAL_UART_IRQHandler(&huart4);
   /* USER CODE BEGIN UART4_IRQn 1 */

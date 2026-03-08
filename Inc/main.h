@@ -121,6 +121,16 @@ typedef struct{
 	uint16_t status;
 }station;
 extern station station_struct;
+extern uint8_t newline_char;
+uint8_t run(uint32_t time_acs_ms, uint16_t velocity /*imp/sec*/, TIM_TypeDef * TimX, TIM_HandleTypeDef *htim, uint32_t Channel1, uint32_t Channel2, uint32_t coordinate /*add*/, GPIO_TypeDef * SwitchPort, uint16_t SwitchPin);
+uint8_t direction(uint8_t axis /*0-x 1-y*/, uint8_t dir);
+uint8_t scan(uint32_t width, uint32_t height, uint8_t N);
+uint8_t homing(TIM_TypeDef * TimX, TIM_HandleTypeDef *htim, uint32_t Channel1, uint32_t Channel2, GPIO_TypeDef * SwitchPort, uint16_t SwitchPin);
+extern cmd_uart RS485_TRANSMITTER;
+extern uint8_t rx_buffer;
+extern uint16_t crc;
+extern station station_struct;
+uint8_t proceed(station * structure, cmd_uart * RS485_structure);
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus
