@@ -128,17 +128,6 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	/*direction(X, pos);
-	run(200, 3000, TIM15, &htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, 8000);
-	//run(time_acs_ms, velocity, TimX, htim, Channel1, Channel2, coordinate)
-
-	direction(X, neg);
-	run(200, 3000, TIM15, &htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, 8000);
-	scan(8000, 700, 5);*/
-	/*if(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_10) == GPIO_PIN_SET){
-		HAL_GPIO_TogglePin(LD4_GPIO_Port, LD4_Pin);
-		HAL_Delay(1000);
-	}*/
 
   }
   /* USER CODE END 3 */
@@ -562,7 +551,7 @@ uint8_t run(uint32_t time_acs_ms, uint16_t velocity /*imp/sec*/, TIM_TypeDef * T
 		HAL_TIM_PWM_Stop(htim, Channel1);
 		HAL_TIM_PWM_Stop(htim, Channel2);
 		if (HAL_GPIO_ReadPin(SwitchPort, SwitchPin) == GPIO_PIN_SET) return 1;
-		if (HAL_GPIO_ReadPin(SwitchPort, SwitchPin) == GPIO_PIN_SET) return 0;
+		if (HAL_GPIO_ReadPin(SwitchPort, SwitchPin) != GPIO_PIN_SET) return 0;
 	}else{
 		return 0;
 	}
@@ -622,7 +611,7 @@ uint8_t homing(TIM_TypeDef * TimX, TIM_HandleTypeDef *htim, uint32_t Channel1, u
 	step_counter = 0;
 	HAL_TIM_PWM_Stop(htim, Channel1);
 	HAL_TIM_PWM_Stop(htim, Channel2);
-	HAL_Delay(100);
+	//HAL_Delay(100);
 	HAL_TIM_PWM_Start(htim, Channel1);
 	HAL_TIM_PWM_Start(htim, Channel2);
 	//Отъезжаем на 250 от концевика (они зацеплены последовательно)
@@ -636,7 +625,7 @@ uint8_t homing(TIM_TypeDef * TimX, TIM_HandleTypeDef *htim, uint32_t Channel1, u
 	}
 	HAL_TIM_PWM_Stop(htim, Channel1);
 	HAL_TIM_PWM_Stop(htim, Channel2);
-	HAL_Delay(100);
+	//HAL_Delay(100);
 	step_counter = 0;
 	//Едем до концевика по оси Y
 	direction(Y, neg);
@@ -652,11 +641,10 @@ uint8_t homing(TIM_TypeDef * TimX, TIM_HandleTypeDef *htim, uint32_t Channel1, u
 	if (step_counter >= 8000){
 		HAL_TIM_PWM_Stop(htim, Channel1);
 		HAL_TIM_PWM_Stop(htim, Channel2);
-		Error_Handler();
+		return 0;
 	}
 	HAL_TIM_PWM_Stop(htim, Channel1);
 	HAL_TIM_PWM_Stop(htim, Channel2);
-	HAL_Delay(100);
 	step_counter = 0;
 	direction(Y, pos);
 	HAL_TIM_PWM_Start(htim, Channel1);
@@ -736,6 +724,7 @@ uint8_t DataRecive(cmd_uart* structure, uint8_t symbol){
 }
 uint8_t proceed(station * station_structure, cmd_uart * RS485_structure){
 	uint8_t message[9] = {0};
+	uint8_t result = 0;
 	if(RS485_structure->dev_addr == 52){
 		if(RS485_structure ->cmd[0] == 0){ //проверяем первый 0
 			if(RS485_structure ->cmd[1] == 1){ //запись
@@ -752,7 +741,7 @@ uint8_t proceed(station * station_structure, cmd_uart * RS485_structure){
 						break;
 					case 4:
 						station_structure->status = 1;
-						homing(TIM15, &htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, GPIOA, GPIO_PIN_10);
+						result = homing(TIM15, &htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, GPIOA, GPIO_PIN_10);
 						station_structure->status = 0;
 						break;
 					case 7:
@@ -763,10 +752,12 @@ uint8_t proceed(station * station_structure, cmd_uart * RS485_structure){
 						station_structure->status = 1;
 						direction(station_structure->axis, station_structure->dir);
 						station_structure->coordinate = RS485_TRANSMITTER.value[1] + (RS485_TRANSMITTER.value[0] * 100);
-						run(station_structure->time_acs, station_structure->velocity, TIM15, &htim15 , TIM_CHANNEL_1, TIM_CHANNEL_2, station_structure->coordinate, GPIOA, GPIO_PIN_10);
+						result = run(station_structure->time_acs, station_structure->velocity, TIM15, &htim15 , TIM_CHANNEL_1, TIM_CHANNEL_2, station_structure->coordinate, GPIOA, GPIO_PIN_10);
 						station_structure->status = 0;
 						break;
 					}
+					HAL_UART_Transmit(&huart4, RS485_TRANSMITTER.frame, 9, HAL_MAX_DELAY);
+					HAL_UART_Transmit(&huart4, &newline_char, 1, HAL_MAX_DELAY);
 				}
 				if(RS485_structure->reg[0] == 1){
 					switch(RS485_structure->reg[1]){
@@ -784,6 +775,7 @@ uint8_t proceed(station * station_structure, cmd_uart * RS485_structure){
 						break;
 					}
 				}
+				RS485_TRANSMITTER.frame[6] = result;
 				HAL_UART_Transmit(&huart4, RS485_TRANSMITTER.frame, 9, HAL_MAX_DELAY);
 				HAL_UART_Transmit(&huart4, &newline_char, 1, HAL_MAX_DELAY);
 			}

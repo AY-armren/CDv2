@@ -209,7 +209,7 @@ void UART4_IRQHandler(void)
   if(RS485_TRANSMITTER.data_update == 1){//проверяем флаг апдейта
 	crc = (RS485_TRANSMITTER.CRC16[1] * 100) + RS485_TRANSMITTER.CRC16[0];
 	if(/*CRC16_calc(RS485_TRANSMITTER.frame, 7) == crc*/ RS485_TRANSMITTER.CRC16[1] == 1 && RS485_TRANSMITTER.CRC16[1] == 1){
-		HAL_UART_Transmit(&huart4, RS485_TRANSMITTER.frame, 9, HAL_MAX_DELAY);
+		//HAL_UART_Transmit(&huart4, RS485_TRANSMITTER.frame, 9, HAL_MAX_DELAY);
 		proceed(&station_struct, &RS485_TRANSMITTER);
 		RS485_TRANSMITTER.data_update = 0;
 	}else{
