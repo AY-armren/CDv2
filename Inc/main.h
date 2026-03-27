@@ -97,39 +97,44 @@ void Error_Handler(void);
 /* USER CODE BEGIN Private defines */
 //инициализация всего того, что будет происходить в прерываниях
 typedef struct{
-	uint8_t ccnt;
-	uint8_t dev_addr;
-	uint8_t cmd[2];
-	uint8_t reg[2];
-	uint8_t value[2];
-	uint8_t CRC16[2];
-	uint8_t data_update; // апдейт данных
-	uint8_t frame[9];
-}cmd_uart;
-extern cmd_uart RS485_TRANSMITTER;
+	uint8_t ccnt; //счетчик
+	uint8_t dev_addr; // адрес усройства
+	uint8_t cmd[2];	  // команда
+	uint8_t reg[2];	  // регистр
+	uint8_t value[2]; // значение
+	uint8_t CRC16[2]; // CRC
+	uint8_t data_update; // флаг заполнения данных
+	uint8_t frame[9];    //общий фрейм
+}cmd_uart; //структура для команды
+extern cmd_uart RS485_TRANSMITTER; //объявление структуры
 uint16_t CRC16_calc(uint8_t* data, size_t length);
 uint8_t DataRecive(cmd_uart* structure, uint8_t symbol);
 typedef struct{
-	uint16_t velocity;
-	uint16_t time_acs;
-	uint16_t coordinate;
-	uint8_t axis;
-	uint8_t dir;
-	uint16_t width;
-	uint16_t height;
-	uint8_t step_number;
-	uint16_t status;
+	uint16_t velocity;   //скорость
+	uint16_t time_acs;   //время разгона
+	uint16_t coordinate; //счетчик шагов
+	uint8_t axis;        //ось 0 - Y, 1 - X
+	uint8_t dir;		 //направление 0 - +     1 - -
+	uint16_t status;    //status (какая команда выполняется)
+	uint8_t x_home;		// статус определения домашней позиции по X
+	uint8_t y_home;		// статус определения домашней позиции по Y
+	uint8_t cmd;
 }station;
-extern station station_struct;
 extern uint8_t newline_char;
-uint8_t run(uint32_t time_acs_ms, uint16_t velocity /*imp/sec*/, TIM_TypeDef * TimX, TIM_HandleTypeDef *htim, uint32_t Channel1, uint32_t Channel2, uint32_t coordinate /*add*/, GPIO_TypeDef * SwitchPort, uint16_t SwitchPin);
 uint8_t direction(uint8_t axis /*0-x 1-y*/, uint8_t dir);
-uint8_t scan(uint32_t width, uint32_t height, uint8_t N);
-uint8_t homing(TIM_TypeDef * TimX, TIM_HandleTypeDef *htim, uint32_t Channel1, uint32_t Channel2, GPIO_TypeDef * SwitchPort, uint16_t SwitchPin);
 extern cmd_uart RS485_TRANSMITTER;
 extern uint8_t rx_buffer;
 extern uint16_t crc;
 extern station station_struct;
+
+extern uint16_t SP; //уставка для регистра
+extern uint16_t acs_dist; //расстояние на ускорение
+extern uint16_t StartSpeed_count; //начальная скороть
+extern uint16_t Delta_count; //прирост в счетчик
+extern uint32_t step_counter; // счечтик шагов
+extern uint8_t dist_x; //флаг достижения концевика при хоуминге по X
+extern uint8_t dist_y; //флаг достижения концевика при хоуминге по Y
+extern uint16_t crc_check;
 uint8_t proceed(station * structure, cmd_uart * RS485_structure);
 /* USER CODE END Private defines */
 

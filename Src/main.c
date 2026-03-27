@@ -75,6 +75,15 @@ uint8_t rx_buffer;
 uint16_t crc;
 station station_struct = {0};
 uint8_t newline_char = '\n';
+
+uint16_t SP = 0;
+uint16_t acs_dist = 0;
+uint16_t StartSpeed_count = 0;
+uint16_t Delta_count = 0;
+uint32_t step_counter = 0;
+uint8_t dist_x = 0;
+uint8_t dist_y = 0;
+uint16_t crc_check = 0;
 /* USER CODE END 0 */
 
 /**
@@ -113,12 +122,12 @@ int main(void)
   MX_UART4_Init();
   /* USER CODE BEGIN 2 */
   TIM15->BDTR |= TIM_BDTR_MOE;
-  HAL_TIM_PWM_Stop(&htim15, TIM_CHANNEL_1);
-  HAL_TIM_PWM_Stop(&htim15, TIM_CHANNEL_2);
-  HAL_UART_Receive_IT(&huart4, &rx_buffer, 1);
-  //homing(TIM15, &htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, GPIOA, GPIO_PIN_10);
-  direction(Y, pos);
-  //run(100, 5000, TIM15, &htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, 8000, GPIOA, GPIO_PIN_10);
+  HAL_TIM_PWM_Stop_IT(&htim15, TIM_CHANNEL_1);    // останавливаем ШИМ по каналу 1
+  HAL_TIM_PWM_Stop_IT(&htim15, TIM_CHANNEL_2);    // останавливаем ШИМ по каналу 2
+  HAL_UART_Receive_IT(&huart4, &rx_buffer, 1); // включаем прерывания
+  HAL_TIM_Base_Stop_IT(&htim15);				   // остановка таймера
+  //HAL_NVIC_SetPriority(TIM1_BRK_TIM15_IRQn, 1, 0); // Достаточно высокий приоритет
+  //HAL_NVIC_EnableIRQ(TIM1_BRK_TIM15_IRQn);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -126,7 +135,6 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-
     /* USER CODE BEGIN 3 */
 
   }
@@ -494,68 +502,6 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-uint8_t run(uint32_t time_acs_ms, uint16_t velocity /*imp/sec*/, TIM_TypeDef * TimX, TIM_HandleTypeDef *htim, uint32_t Channel1, uint32_t Channel2, uint32_t coordinate /*add*/, GPIO_TypeDef * SwitchPort, uint16_t SwitchPin){
-	//РАЗГОН
-	//уставка для счетчика
-	uint16_t SP = 1000000/velocity;//частота инкреммента / скорость
-	//расчет ускорения
-	//расстояние за время ускорения (шагов) - перевод в шагов в мс
-	uint16_t acs_dist = (velocity*time_acs_ms)/2000; /* трапецивидный профиль /‾\ => получим на ускорении прямоугольный ипеугольник, тогда v*tacs/2 */
-	//Расчитываем шаг скорости на один шаг двигателя
-	uint16_t StartSpeed_count = 5000;
-	uint16_t Delta_count = (StartSpeed_count - SP)/acs_dist + 1;
-	//ДВИЖЕНИЕ
-	//Счетчик шагов
-	uint32_t step_counter = 0;
-	//ОСТАНОВКА
-	uint16_t deacs_dist = acs_dist;
-	TimX -> ARR  = StartSpeed_count;
-	TimX -> CCR1 = StartSpeed_count/2; // Скважность по первому каналу 50%
-	TimX -> CCR2 = StartSpeed_count/2; // Скважность по второму каналу 50%
-	HAL_TIM_PWM_Start(htim, Channel1);
-	HAL_TIM_PWM_Start(htim, Channel2);
-	if (coordinate >= acs_dist + deacs_dist){
-		while(step_counter != acs_dist/*TimX -> ARR != SP*/ && HAL_GPIO_ReadPin(SwitchPort, SwitchPin) != GPIO_PIN_SET){ // пока period != уставке
-			if (TimX->SR & TIM_SR_UIF)
-			{
-				TimX->SR &= ~TIM_SR_UIF; //сброс флага прерывания
-				TimX->ARR -= Delta_count;
-				TimX -> CCR1 = TimX->ARR/2; // Скважность по первому каналу 50%
-				TimX -> CCR2 = TimX -> CCR1; // Скважность по второму каналу 50%
-				step_counter++;
-			}
-			if(TimX -> ARR < SP){
-				TimX -> ARR = SP;
-			}
-		}
-		while(step_counter != coordinate - deacs_dist && HAL_GPIO_ReadPin(SwitchPort, SwitchPin) != GPIO_PIN_SET){
-			if (TimX->SR & TIM_SR_UIF)
-			{
-				TimX->SR &= ~TIM_SR_UIF; //сброс флага прерывания
-				step_counter++;
-			}
-		}
-		while(step_counter != coordinate && HAL_GPIO_ReadPin(SwitchPort, SwitchPin) != GPIO_PIN_SET){
-			if (TimX->SR & TIM_SR_UIF)
-			{
-				TimX->SR &= ~TIM_SR_UIF; //сброс флага прерывания
-				TimX->ARR += Delta_count;
-				TimX -> CCR1 = TimX->ARR/2; // Скважность по первому каналу 50%
-				TimX -> CCR2 = TimX -> CCR1; // Скважность по второму каналу 50%
-				step_counter++;
-			}
-			if(TimX -> ARR > 5000){
-				TimX -> ARR = 5000;
-			}
-		}
-		HAL_TIM_PWM_Stop(htim, Channel1);
-		HAL_TIM_PWM_Stop(htim, Channel2);
-		if (HAL_GPIO_ReadPin(SwitchPort, SwitchPin) == GPIO_PIN_SET) return 1;
-		if (HAL_GPIO_ReadPin(SwitchPort, SwitchPin) != GPIO_PIN_SET) return 0;
-	}else{
-		return 0;
-	}
-}
 uint8_t direction(uint8_t axis /*0-x 1-y*/, uint8_t dir){
 	if(axis == X && dir == pos){
 		HAL_GPIO_WritePin(DIR1_GPIO_Port, DIR1_Pin, GPIO_PIN_SET);
@@ -573,114 +519,54 @@ uint8_t direction(uint8_t axis /*0-x 1-y*/, uint8_t dir){
 		HAL_GPIO_WritePin(DIR1_GPIO_Port, DIR1_Pin, GPIO_PIN_RESET);
 		HAL_GPIO_WritePin(DIR2_GPIO_Port, DIR2_Pin, GPIO_PIN_SET);
 	}
-}
-/*uint8_t scan(uint32_t width, uint32_t height, uint8_t N){
-	for(uint8_t i = 0; i <= N; i++){
-		direction(X, pos);
-		run(250, 2500, TIM15, &htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, width);
-		direction(Y, pos);
-		run(250, 2500, TIM15, &htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, height);
-		direction(X, neg);
-		run(250, 2500, TIM15, &htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, width);
-		direction(Y, pos);
-		run(250, 2500, TIM15, &htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, height);
-	}
-}*/
-
-uint8_t homing(TIM_TypeDef * TimX, TIM_HandleTypeDef *htim, uint32_t Channel1, uint32_t Channel2, GPIO_TypeDef * SwitchPort, uint16_t SwitchPin){
-	uint32_t step_counter = 0;
-	TimX -> ARR  = 5000;
-	TimX -> CCR1 = 2500; // Скважность по первому каналу 50%
-	TimX -> CCR2 = 2500; // Скважность по второму каналу 50%
-	//запуск движения к точке (0;0)
-	direction(X, neg);
-	HAL_TIM_PWM_Start(htim, Channel1);
-	HAL_TIM_PWM_Start(htim, Channel2);
-	while(HAL_GPIO_ReadPin(SwitchPort, SwitchPin) != GPIO_PIN_SET && step_counter < 8000){
-		if (TimX->SR & TIM_SR_UIF)
-		{
-			TimX->SR &= ~TIM_SR_UIF; //сброс флага прерывания
-			step_counter++;
-		}
-	}
-	if (step_counter >= 8000){
-		HAL_TIM_PWM_Stop(htim, Channel1);
-		HAL_TIM_PWM_Stop(htim, Channel2);
-		Error_Handler();
-	}
-	step_counter = 0;
-	HAL_TIM_PWM_Stop(htim, Channel1);
-	HAL_TIM_PWM_Stop(htim, Channel2);
-	//HAL_Delay(100);
-	HAL_TIM_PWM_Start(htim, Channel1);
-	HAL_TIM_PWM_Start(htim, Channel2);
-	//Отъезжаем на 250 от концевика (они зацеплены последовательно)
-	direction(X, pos);
-	while(step_counter != 250){
-		if (TimX->SR & TIM_SR_UIF)
-		{
-			TimX->SR &= ~TIM_SR_UIF; //сброс флага прерывания
-			step_counter++;
-		}
-	}
-	HAL_TIM_PWM_Stop(htim, Channel1);
-	HAL_TIM_PWM_Stop(htim, Channel2);
-	//HAL_Delay(100);
-	step_counter = 0;
-	//Едем до концевика по оси Y
-	direction(Y, neg);
-	HAL_TIM_PWM_Start(htim, Channel1);
-	HAL_TIM_PWM_Start(htim, Channel2);
-	while(HAL_GPIO_ReadPin(SwitchPort, SwitchPin) != GPIO_PIN_SET && step_counter < 8000){
-		if (TimX->SR & TIM_SR_UIF)
-		{
-			TimX->SR &= ~TIM_SR_UIF; //сброс флага прерывания
-			step_counter++;
-		}
-	}
-	if (step_counter >= 8000){
-		HAL_TIM_PWM_Stop(htim, Channel1);
-		HAL_TIM_PWM_Stop(htim, Channel2);
-		return 0;
-	}
-	HAL_TIM_PWM_Stop(htim, Channel1);
-	HAL_TIM_PWM_Stop(htim, Channel2);
-	step_counter = 0;
-	direction(Y, pos);
-	HAL_TIM_PWM_Start(htim, Channel1);
-	HAL_TIM_PWM_Start(htim, Channel2);
-	while(step_counter != 250){
-		if (TimX->SR & TIM_SR_UIF)
-		{
-			TimX->SR &= ~TIM_SR_UIF; //сброс флага прерывания
-			step_counter++;
-		}
-	}
-	HAL_TIM_PWM_Stop(htim, Channel1);
-	HAL_TIM_PWM_Stop(htim, Channel2);
 	return 1;
 }
+
 uint16_t CRC16_calc(uint8_t* data, size_t length) {
-    uint16_t crc = 0x0000; // Начальное значение (может быть 0xFFFF)
+    uint16_t crc = 0xFFFF; // Начальное значение (может быть 0xFFFF)
 
     for (size_t i = 0; i < length; i++) {
         // XOR текущего байта со старшим байтом CRC
-        crc ^= ((uint16_t)data[i] << 8);
+        crc ^= (uint16_t)data[i];
 
         // Обрабатываем каждый бит байта
         for (int bit = 0; bit < 8; bit++) {
-            if (crc & 0x8000) {
-                // Если старший бит = 1, сдвигаем и XOR с полиномом
-                crc = (crc << 1) ^ 0x8005;
+            if (crc & 0x0001) {
+                // Если младший бит = 1, сдвигаем и XOR с полиномом
+                crc = (crc >> 1) ^ 0xA001;
             } else {
                 // Иначе просто сдвигаем
-                crc <<= 1;
+                crc >>= 1;
             }
         }
     }
 
     return crc;
 }
+
+uint16_t crc16_update(uint16_t crc, uint8_t data)
+{
+    crc ^= data;
+    for (int i = 0; i < 8; ++i)
+    {
+        if (crc & 1)
+            crc = (crc >> 1) ^ 0xA001;  // полином для CRC-16/MODBUS
+        else
+            crc = (crc >> 1);
+    }
+    return crc;
+}
+
+uint16_t crc16_modbus(uint8_t *buf, uint32_t len)
+{
+    uint16_t crc = 0xFFFF;            // стартовое значение для MODBUS
+    for (uint32_t i = 0; i < len; ++i)
+    {
+        crc = crc16_update(crc, buf[i]);
+    }
+    return crc;                       // результат: младший байт, затем старший
+}
+
 uint8_t DataRecive(cmd_uart* structure, uint8_t symbol){
 	//прием байта адреса устройства
 	structure->frame[structure->ccnt] = symbol;
@@ -723,8 +609,7 @@ uint8_t DataRecive(cmd_uart* structure, uint8_t symbol){
 	return 1;
 }
 uint8_t proceed(station * station_structure, cmd_uart * RS485_structure){
-	uint8_t message[9] = {0};
-	uint8_t result = 0;
+	//uint8_t crc[2] = {0};
 	if(RS485_structure->dev_addr == 52){
 		if(RS485_structure ->cmd[0] == 0){ //проверяем первый 0
 			if(RS485_structure ->cmd[1] == 1){ //запись
@@ -737,89 +622,117 @@ uint8_t proceed(station * station_structure, cmd_uart * RS485_structure){
 						station_structure->time_acs = RS485_TRANSMITTER.value[1] + (RS485_TRANSMITTER.value[0] * 100);
 						break;
 					case 3:
-						station_structure->coordinate = RS485_TRANSMITTER.value[1] + (RS485_TRANSMITTER.value[0] * 100);
+						HAL_TIM_PWM_Stop_IT(&htim15, TIM_CHANNEL_1);    // зайпускаем ШИМ по каналу 1
+						HAL_TIM_PWM_Stop_IT(&htim15, TIM_CHANNEL_2);    // зайпускаем ШИМ по каналу 2
+						HAL_TIM_Base_Stop_IT(&htim15);
+						step_counter = 0;
+						station_struct.status = 0;
 						break;
 					case 4:
-						station_structure->status = 1;
-						result = homing(TIM15, &htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, GPIOA, GPIO_PIN_10);
-						station_structure->status = 0;
+						step_counter = 0;
+						TIM15 -> ARR  = 5000;
+						TIM15 -> CCR1 = 2500;
+						TIM15 -> CCR2 = 2500;
+						station_structure-> x_home = 0;
+						dist_x = 0;
+						station_structure->status = 2;
+						HAL_TIM_PWM_Start_IT(&htim15, TIM_CHANNEL_1);    // зайпускаем ШИМ по каналу 1
+						HAL_TIM_PWM_Start_IT(&htim15, TIM_CHANNEL_2);    // зайпускаем ШИМ по каналу 2
+						HAL_TIM_Base_Start_IT(&htim15);				  // Запускаем таймер
+						break;
+					case 6:
+						step_counter = 0;
+						TIM15 -> ARR  = 5000;
+						TIM15 -> CCR1 = 2500;
+						TIM15 -> CCR2 = 2500;
+						station_structure-> y_home = 0;
+						dist_y = 0;
+						station_structure->status = 3;
+						HAL_TIM_PWM_Start_IT(&htim15, TIM_CHANNEL_1);    // зайпускаем ШИМ по каналу 1
+						HAL_TIM_PWM_Start_IT(&htim15, TIM_CHANNEL_2);    // зайпускаем ШИМ по каналу 2
+						HAL_TIM_Base_Start_IT(&htim15);				  // Запускаем таймер
 						break;
 					case 7:
 						station_structure->axis = (RS485_TRANSMITTER.value[1]);
 						station_structure->dir = (RS485_TRANSMITTER.value[0]);
+						direction(station_structure->axis, station_structure->dir);
 						break;
 					case 8:
-						station_structure->status = 1;
-						direction(station_structure->axis, station_structure->dir);
+						TIM15 -> ARR = 5000;
+						TIM15 -> CCR1 = 2500;
+						TIM15 -> CCR2 = 2500;
 						station_structure->coordinate = RS485_TRANSMITTER.value[1] + (RS485_TRANSMITTER.value[0] * 100);
-						result = run(station_structure->time_acs, station_structure->velocity, TIM15, &htim15 , TIM_CHANNEL_1, TIM_CHANNEL_2, station_structure->coordinate, GPIOA, GPIO_PIN_10);
-						station_structure->status = 0;
+						SP = 1000000/station_structure->velocity;//частота инкреммента / скорость
+						//расчет ускорения
+						//расстояние за время ускорения (шагов) - перевод в шагов в мс
+						acs_dist = (station_structure->velocity*station_structure->time_acs)/2000; /* трапецивидный профиль /‾\ => получим на ускорении прямоугольный ипеугольник, тогда v*tacs/2 */
+						//Расчитываем шаг скорости на один шаг двигателя
+						StartSpeed_count = 5000;
+						Delta_count = (StartSpeed_count - SP)/acs_dist + 1;
+						//ДВИЖЕНИЕ
+						//Счетчик шагов
+					    step_counter = 0;
+					    station_structure->status = 1;
+						HAL_TIM_PWM_Start_IT(&htim15, TIM_CHANNEL_1);    // останавливаем ШИМ по каналу 1
+						HAL_TIM_PWM_Start_IT(&htim15, TIM_CHANNEL_2);    // останавливаем ШИМ по каналу 2
+						HAL_TIM_Base_Start_IT(&htim15);				  // Запускаем таймер
+
 						break;
 					}
-					HAL_UART_Transmit(&huart4, RS485_TRANSMITTER.frame, 9, HAL_MAX_DELAY);
-					HAL_UART_Transmit(&huart4, &newline_char, 1, HAL_MAX_DELAY);
-				}
-				if(RS485_structure->reg[0] == 1){
-					switch(RS485_structure->reg[1]){
-					case 0:
-						station_structure->width = RS485_TRANSMITTER.value[1] + (RS485_TRANSMITTER.value[0] * 100);
-						break;
-					case 1:
-						station_structure->height = RS485_TRANSMITTER.value[1] + (RS485_TRANSMITTER.value[0] * 100);
-						break;
-					case 2:
-						station_structure-> step_number = RS485_TRANSMITTER.value[0];
-						break;
-					case 3:
-						Error_Handler();
-						break;
+					if(RS485_structure->reg[1] != 4 && RS485_structure->reg[1] != 6 && RS485_structure->reg[1] != 8){
+						HAL_UART_Transmit(&huart4, RS485_TRANSMITTER.frame, 9, HAL_MAX_DELAY);
+						HAL_UART_Transmit(&huart4, &newline_char, 1, HAL_MAX_DELAY);
 					}
 				}
-				RS485_TRANSMITTER.frame[6] = result;
-				HAL_UART_Transmit(&huart4, RS485_TRANSMITTER.frame, 9, HAL_MAX_DELAY);
-				HAL_UART_Transmit(&huart4, &newline_char, 1, HAL_MAX_DELAY);
 			}
-			if(RS485_structure ->cmd[1] == 4){ //чтение
-				memcpy(message, RS485_structure->frame, sizeof(RS485_structure->frame)); //в тупую присваиваем значение фрейма потом будет редачить данные
-				switch(RS485_structure->reg[1]){
-				case 1:
-					message[5] = station_structure->velocity/100;
-					message[6] = station_structure->velocity%100;
-				break;
-				case 2:
-					message[5] = station_structure->time_acs/100;
-					message[6] = station_structure->time_acs%100;
-				break;
-				case 5:
-					message[5] = 0;
-					if(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_10) == GPIO_PIN_SET){
-						message[6] = 1;
-					}else{
-						message[6] = 0;
+			if(RS485_structure ->cmd[1] == 4){
+				if(RS485_structure->reg[0] == 0){
+					switch(RS485_structure->reg[1]){
+					case 1:
+						RS485_structure->frame[5]  = station_structure->velocity/100;
+						RS485_structure->frame[6]  = station_structure->velocity%100;
+					break;
+					case 2:
+						RS485_structure->frame[5]  =  station_structure->time_acs/100;
+						RS485_structure->frame[6]  =  station_structure->time_acs%100;
+					break;
+					case 3:
+						RS485_structure->frame[5]  =  station_structure->coordinate/100;
+						RS485_structure->frame[6]  =  station_structure->coordinate%100;
+					break;
+					case 4:
+						//RS485_structure->frame[5]  =  0;
+						//RS485_structure->frame[6]  =  station_structure->x_home + 222;
+						__NOP();
+					break;
+					case 5:
+						RS485_structure->frame[5] = 0;
+						if(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_10) == GPIO_PIN_SET){
+							RS485_structure->frame[6] = 1;
+						}else{
+							RS485_structure->frame[6] = 0;
+						}
+					break;
+					case 6:
+						RS485_structure->frame[5]  =  0;
+						RS485_structure->frame[6]  =  station_structure->y_home;
+					break;
+					case 7:
+						RS485_structure->frame[5]  =  station_structure->axis;
+						RS485_structure->frame[6]  =  station_structure->dir;;
+					break;
+					case 8:
+						RS485_structure->frame[5]  = 0;
+						RS485_structure->frame[6]  = TIM15->CR1 & TIM_CR1_CEN;
+					break;
 					}
-				break;
-				case 7:
-					message[5] = station_structure->axis;
-					message[6] = station_structure->dir;
-				break;
-				case 10:
-					message[5] = station_structure->height/100;
-					message[6] = station_structure->height%100;
-				break;
-				case 11:
-					message[5] = station_structure->width/100;
-					message[6] = station_structure->width%100;
-				break;
-				case 12:
-					message[5] = station_structure->step_number/100;
-					message[6] = station_structure->step_number%100;
-				break;
 				}
-				HAL_UART_Transmit(&huart4, message, 9, HAL_MAX_DELAY);
+				HAL_UART_Transmit(&huart4, RS485_structure->frame, 9, HAL_MAX_DELAY);
 				HAL_UART_Transmit(&huart4, &newline_char, 1, HAL_MAX_DELAY);
 			}
 		}
 	}
+	return 1;
 }
 /* USER CODE END 4 */
 

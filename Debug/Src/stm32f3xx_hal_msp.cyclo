@@ -2,9 +2,9 @@
 ../Src/stm32f3xx_hal_msp.c:90:6:HAL_SPI_MspInit	2
 ../Src/stm32f3xx_hal_msp.c:128:6:HAL_SPI_MspDeInit	2
 ../Src/stm32f3xx_hal_msp.c:158:6:HAL_TIM_PWM_MspInit	3
-../Src/stm32f3xx_hal_msp.c:185:6:HAL_TIM_MspPostInit	3
-../Src/stm32f3xx_hal_msp.c:238:6:HAL_TIM_PWM_MspDeInit	3
-../Src/stm32f3xx_hal_msp.c:271:6:HAL_UART_MspInit	2
-../Src/stm32f3xx_hal_msp.c:311:6:HAL_UART_MspDeInit	2
-../Src/stm32f3xx_hal_msp.c:342:6:HAL_PCD_MspInit	2
-../Src/stm32f3xx_hal_msp.c:379:6:HAL_PCD_MspDeInit	2
+../Src/stm32f3xx_hal_msp.c:191:6:HAL_TIM_MspPostInit	3
+../Src/stm32f3xx_hal_msp.c:244:6:HAL_TIM_PWM_MspDeInit	3
+../Src/stm32f3xx_hal_msp.c:297:6:HAL_UART_MspInit	2
+../Src/stm32f3xx_hal_msp.c:337:6:HAL_UART_MspDeInit	2
+../Src/stm32f3xx_hal_msp.c:368:6:HAL_PCD_MspInit	2
+../Src/stm32f3xx_hal_msp.c:405:6:HAL_PCD_MspDeInit	2

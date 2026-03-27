@@ -51,10 +51,12 @@
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+uint16_t test_var=0;
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
+extern TIM_HandleTypeDef htim1;
+extern TIM_HandleTypeDef htim15;
 extern UART_HandleTypeDef huart4;
 /* USER CODE BEGIN EV */
 
@@ -199,6 +201,117 @@ void SysTick_Handler(void)
 /******************************************************************************/
 
 /**
+  * @brief This function handles TIM1 break and TIM15 interrupts.
+  */
+void TIM1_BRK_TIM15_IRQHandler(void)
+{
+  /* USER CODE BEGIN TIM1_BRK_TIM15_IRQn 0 */
+  if(station_struct.status == 1){
+	  if(step_counter < station_struct.coordinate){
+			if(step_counter < acs_dist){
+				TIM15->ARR -= Delta_count;
+				TIM15->CCR1 = TIM15->ARR/2;
+				TIM15->CCR2 = TIM15->CCR1;
+				if(TIM15->ARR < SP){
+					TIM15->ARR = SP;
+					TIM15->CCR1 = SP/2;
+					TIM15->CCR2 = TIM15->CCR1;
+				}
+			}
+			if(step_counter >= station_struct.coordinate-acs_dist){
+				TIM15->ARR += Delta_count;
+				TIM15->CCR1 = TIM15->ARR/2;
+				TIM15->CCR2 = TIM15->CCR1;
+				if(TIM15->ARR > 5000){
+					TIM15->ARR = 5000;
+					TIM15->CCR1 = 2500;
+					TIM15->CCR2 = 2500;
+				}
+			}
+	  }
+	  if(step_counter == station_struct.coordinate || HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_10) == GPIO_PIN_SET){
+		  station_struct.status = 0;
+		  HAL_TIM_PWM_Stop_IT(&htim15, TIM_CHANNEL_1);    // останавливаем ШИМ по каналу 1
+		  HAL_TIM_PWM_Stop_IT(&htim15, TIM_CHANNEL_2);
+		  HAL_TIM_Base_Stop_IT(&htim15);
+		  RS485_TRANSMITTER.frame[5] = 0;
+		  if(step_counter != station_struct.coordinate){
+			  RS485_TRANSMITTER.frame[6] = 1;
+		  }else{
+			  RS485_TRANSMITTER.frame[6] = 0;
+		  }
+		  RS485_TRANSMITTER.frame[0] = 32;
+		  HAL_UART_Transmit(&huart4, RS485_TRANSMITTER.frame, 9, HAL_MAX_DELAY);
+		  HAL_UART_Transmit(&huart4, &newline_char, 1, HAL_MAX_DELAY);
+	  }
+  }
+
+  if(station_struct.status == 2){
+	  if(dist_x != 1){
+		  direction(1, 1);
+		  if(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_10) == GPIO_PIN_SET){
+			  dist_x = 1;
+			  direction(1, 0);
+			  step_counter = 0;
+		  }
+	  }
+	  if(step_counter == 200 && dist_x == 1){
+		  station_struct.x_home = 1;
+	  }
+
+	  if(station_struct.x_home == 1|| step_counter == 16000){
+		  HAL_TIM_PWM_Stop_IT(&htim15, TIM_CHANNEL_1);    // останавливаем ШИМ по каналу 1
+		  HAL_TIM_PWM_Stop_IT(&htim15, TIM_CHANNEL_2);
+		  HAL_TIM_Base_Stop_IT(&htim15);
+		  RS485_TRANSMITTER.frame[5] = 0;
+		  if(step_counter != 16000){
+			  RS485_TRANSMITTER.frame[6] = 1;
+		  }else{
+			  RS485_TRANSMITTER.frame[6] = 0;
+		  }
+		  HAL_UART_Transmit(&huart4, RS485_TRANSMITTER.frame, 9, HAL_MAX_DELAY);
+		  HAL_UART_Transmit(&huart4, &newline_char, 1, HAL_MAX_DELAY);
+	  }
+  }
+  if(station_struct.status == 3){
+  	  if(dist_y != 1){
+  		  direction(0, 1);
+  		  if(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_10) == GPIO_PIN_SET){
+  			  dist_y = 1;
+  			  direction(0, 0);
+  			  step_counter = 0;
+  		  }
+  	  }
+  	  if(step_counter == 200 && dist_y == 1){
+  		  station_struct.y_home = 1;
+  	  }
+
+  	  if(station_struct.y_home == 1|| step_counter == 16000){
+  		 HAL_TIM_PWM_Stop_IT(&htim15, TIM_CHANNEL_1);    // останавливаем ШИМ по каналу 1
+		 HAL_TIM_PWM_Stop_IT(&htim15, TIM_CHANNEL_2);
+		 HAL_TIM_Base_Stop_IT(&htim15);
+		 RS485_TRANSMITTER.frame[5] = 0;
+		 if(step_counter != 16000){
+			 RS485_TRANSMITTER.frame[6] = 1;
+		 }else{
+			 RS485_TRANSMITTER.frame[6] = 0;
+		 }
+		 HAL_UART_Transmit(&huart4, RS485_TRANSMITTER.frame, 9, HAL_MAX_DELAY);
+		 HAL_UART_Transmit(&huart4, &newline_char, 1, HAL_MAX_DELAY);
+  	  }
+    }
+
+  TIM15->SR &= ~TIM_SR_UIF; //сброс флага прерывания
+  step_counter++;
+  /* USER CODE END TIM1_BRK_TIM15_IRQn 0 */
+  HAL_TIM_IRQHandler(&htim1);
+  HAL_TIM_IRQHandler(&htim15);
+  /* USER CODE BEGIN TIM1_BRK_TIM15_IRQn 1 */
+
+  /* USER CODE END TIM1_BRK_TIM15_IRQn 1 */
+}
+
+/**
   * @brief This function handles UART4 global interrupt / UART4 wake-up interrupt through EXTI line 34.
   */
 void UART4_IRQHandler(void)
@@ -207,9 +320,9 @@ void UART4_IRQHandler(void)
   uint8_t received_char = (uint8_t)(UART4-> RDR  & 0xFF);
   DataRecive(&RS485_TRANSMITTER, received_char);//выполняем заполнение команды
   if(RS485_TRANSMITTER.data_update == 1){//проверяем флаг апдейта
-	crc = (RS485_TRANSMITTER.CRC16[1] * 100) + RS485_TRANSMITTER.CRC16[0];
-	if(/*CRC16_calc(RS485_TRANSMITTER.frame, 7) == crc*/ RS485_TRANSMITTER.CRC16[1] == 1 && RS485_TRANSMITTER.CRC16[1] == 1){
-		//HAL_UART_Transmit(&huart4, RS485_TRANSMITTER.frame, 9, HAL_MAX_DELAY);
+	crc = (RS485_TRANSMITTER.CRC16[0] << 8) + RS485_TRANSMITTER.CRC16[1];
+	crc_check = CRC16_calc(RS485_TRANSMITTER.frame, 7);
+	if(crc == crc_check){
 		proceed(&station_struct, &RS485_TRANSMITTER);
 		RS485_TRANSMITTER.data_update = 0;
 	}else{
