@@ -208,7 +208,7 @@ void TIM1_BRK_TIM15_IRQHandler(void)
   /* USER CODE BEGIN TIM1_BRK_TIM15_IRQn 0 */
   if(station_struct.status == 1){
 	  if(step_counter < station_struct.coordinate){
-			if(step_counter < acs_dist){
+			if(step_counter < acs_dist || TIM15->ARR == SP){
 				TIM15->ARR -= Delta_count;
 				TIM15->CCR1 = TIM15->ARR/2;
 				TIM15->CCR2 = TIM15->CCR1;
@@ -218,7 +218,7 @@ void TIM1_BRK_TIM15_IRQHandler(void)
 					TIM15->CCR2 = TIM15->CCR1;
 				}
 			}
-			if(step_counter >= station_struct.coordinate-acs_dist){
+			if(step_counter >= station_struct.coordinate-acs_dist || TIM15->ARR == 5000){
 				TIM15->ARR += Delta_count;
 				TIM15->CCR1 = TIM15->ARR/2;
 				TIM15->CCR2 = TIM15->CCR1;
@@ -245,7 +245,6 @@ void TIM1_BRK_TIM15_IRQHandler(void)
 		  HAL_UART_Transmit(&huart4, &newline_char, 1, HAL_MAX_DELAY);
 	  }
   }
-
   if(station_struct.status == 2){
 	  if(dist_x != 1){
 		  direction(1, 1);
@@ -300,8 +299,113 @@ void TIM1_BRK_TIM15_IRQHandler(void)
 		 HAL_UART_Transmit(&huart4, &newline_char, 1, HAL_MAX_DELAY);
   	  }
     }
+  if(station_struct.status == 4){
+	  if(step_counter == station_struct.coordinate || HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_10) == GPIO_PIN_SET){
+		  HAL_TIM_PWM_Stop_IT(&htim15, TIM_CHANNEL_1);    // останавливаем ШИМ по каналу 1
+		  HAL_TIM_PWM_Stop_IT(&htim15, TIM_CHANNEL_2);
+		  HAL_TIM_Base_Stop_IT(&htim15);
+		  RS485_TRANSMITTER.frame[5] = 0;
+		  if(step_counter != station_struct.coordinate){
+			  RS485_TRANSMITTER.frame[6] = 1;
+		  }else{
+			  RS485_TRANSMITTER.frame[6] = 0;
+		  }
+		  RS485_TRANSMITTER.frame[0] = 32;
+		  HAL_UART_Transmit(&huart4, RS485_TRANSMITTER.frame, 9, HAL_MAX_DELAY);
+		  HAL_UART_Transmit(&huart4, &newline_char, 1, HAL_MAX_DELAY);
+	  }
+  }
+  if(station_struct.status == 5){
+	if(station_struct.internal_progress == 0){
+		direction(1, 0);
+		if(step_counter < acs_dist){
+			TIM15 -> ARR -= Delta_count;
+			TIM15->CCR1 = TIM15->ARR/2;
+			TIM15->CCR2 = TIM15->CCR1;
+		}
 
-  TIM15->SR &= ~TIM_SR_UIF; //сброс флага прерывания
+		if(step_counter >= station_struct.width-acs_dist){
+			TIM15 -> ARR += Delta_count;
+			TIM15->CCR1 = TIM15->ARR/2;
+			TIM15->CCR2 = TIM15->CCR1;
+		}
+
+		if (TIM15 -> ARR > 5000){
+			TIM15 -> ARR = 5000;
+			TIM15 -> CCR1 = 5000;
+			TIM15 -> CCR2 = 2500;
+		}
+
+		if (TIM15 -> ARR < SP){
+			TIM15 -> ARR = SP;
+			TIM15 -> CCR1 = TIM15->ARR/2;
+			TIM15 -> CCR2 = TIM15 -> CCR1;
+		}
+
+		if(step_counter == station_struct.width || HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_10) == GPIO_PIN_SET){
+			station_struct.internal_progress = 1;
+			step_counter = 0;
+		}
+	}
+	if(station_struct.internal_progress == 1){
+		direction(0, 0);
+		TIM15 -> ARR = 5000;
+		TIM15 -> CCR1 = 2500;
+		TIM15 -> CCR2 = 2500;
+		if(step_counter == station_struct.height){
+			station_struct.internal_progress = 2;
+			step_counter = 0;
+		}
+	}
+	if(station_struct.internal_progress == 2){
+		direction(1, 1);
+		if(step_counter < acs_dist){
+			TIM15 -> ARR -= Delta_count;
+			TIM15->CCR1 = TIM15->ARR/2;
+			TIM15->CCR2 = TIM15->CCR1;
+		}
+
+		if(step_counter >= station_struct.width-acs_dist){
+			TIM15 -> ARR += Delta_count;
+			TIM15->CCR1 = TIM15->ARR/2;
+			TIM15->CCR2 = TIM15->CCR1;
+		}
+
+		if (TIM15 -> ARR > 5000){
+			TIM15 -> ARR = 5000;
+			TIM15 -> CCR1 = 5000;
+			TIM15 -> CCR2 = 2500;
+		}
+
+		if (TIM15 -> ARR < SP){
+			TIM15 -> ARR = SP;
+			TIM15 -> CCR1 = TIM15->ARR/2;
+			TIM15 -> CCR2 = TIM15 -> CCR1;
+		}
+
+		if(step_counter == station_struct.width || HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_10) == GPIO_PIN_SET){
+			station_struct.internal_progress = 3;
+			step_counter = 0;
+		}
+	}
+	if(station_struct.internal_progress == 3){
+		direction(0, 0);
+		TIM15 -> ARR = 5000;
+		TIM15 -> CCR1 = 2500;
+		TIM15 -> CCR2 = 2500;
+		if(step_counter == station_struct.height || HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_10) == GPIO_PIN_SET){
+			station_struct.internal_progress = 0;
+			station_struct.external_progress +=1;
+			step_counter = 0;
+		}
+	}
+	if(station_struct.external_progress == station_struct.repetition){
+		HAL_TIM_PWM_Stop_IT(&htim15, TIM_CHANNEL_1);
+		HAL_TIM_PWM_Stop_IT(&htim15, TIM_CHANNEL_2);
+		HAL_TIM_Base_Stop_IT(&htim15);
+	}
+  }
+  //TIM15->SR &= ~TIM_SR_UIF; //сброс флага прерывания
   step_counter++;
   /* USER CODE END TIM1_BRK_TIM15_IRQn 0 */
   HAL_TIM_IRQHandler(&htim1);

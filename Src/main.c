@@ -84,6 +84,7 @@ uint32_t step_counter = 0;
 uint8_t dist_x = 0;
 uint8_t dist_y = 0;
 uint16_t crc_check = 0;
+uint16_t crc_test;
 /* USER CODE END 0 */
 
 /**
@@ -622,11 +623,9 @@ uint8_t proceed(station * station_structure, cmd_uart * RS485_structure){
 						station_structure->time_acs = RS485_TRANSMITTER.value[1] + (RS485_TRANSMITTER.value[0] * 100);
 						break;
 					case 3:
-						HAL_TIM_PWM_Stop_IT(&htim15, TIM_CHANNEL_1);    // зайпускаем ШИМ по каналу 1
-						HAL_TIM_PWM_Stop_IT(&htim15, TIM_CHANNEL_2);    // зайпускаем ШИМ по каналу 2
-						HAL_TIM_Base_Stop_IT(&htim15);
-						step_counter = 0;
-						station_struct.status = 0;
+						station_structure->axis = (RS485_TRANSMITTER.value[1]);
+						station_structure->dir = (RS485_TRANSMITTER.value[0]);
+						direction(station_structure->axis, station_structure->dir);
 						break;
 					case 4:
 						step_counter = 0;
@@ -640,7 +639,7 @@ uint8_t proceed(station * station_structure, cmd_uart * RS485_structure){
 						HAL_TIM_PWM_Start_IT(&htim15, TIM_CHANNEL_2);    // зайпускаем ШИМ по каналу 2
 						HAL_TIM_Base_Start_IT(&htim15);				  // Запускаем таймер
 						break;
-					case 6:
+					case 5:
 						step_counter = 0;
 						TIM15 -> ARR  = 5000;
 						TIM15 -> CCR1 = 2500;
@@ -652,37 +651,65 @@ uint8_t proceed(station * station_structure, cmd_uart * RS485_structure){
 						HAL_TIM_PWM_Start_IT(&htim15, TIM_CHANNEL_2);    // зайпускаем ШИМ по каналу 2
 						HAL_TIM_Base_Start_IT(&htim15);				  // Запускаем таймер
 						break;
-					case 7:
-						station_structure->axis = (RS485_TRANSMITTER.value[1]);
-						station_structure->dir = (RS485_TRANSMITTER.value[0]);
-						direction(station_structure->axis, station_structure->dir);
+					case 6:
+						HAL_TIM_PWM_Stop_IT(&htim15, TIM_CHANNEL_1);    // зайпускаем ШИМ по каналу 1
+						HAL_TIM_PWM_Stop_IT(&htim15, TIM_CHANNEL_2);    // зайпускаем ШИМ по каналу 2
+						HAL_TIM_Base_Stop_IT(&htim15);
+						step_counter = 0;
+						station_struct.status = 0;
 						break;
-					case 8:
-						TIM15 -> ARR = 5000;
-						TIM15 -> CCR1 = 2500;
-						TIM15 -> CCR2 = 2500;
-						station_structure->coordinate = RS485_TRANSMITTER.value[1] + (RS485_TRANSMITTER.value[0] * 100);
-						SP = 1000000/station_structure->velocity;//частота инкреммента / скорость
-						//расчет ускорения
-						//расстояние за время ускорения (шагов) - перевод в шагов в мс
-						acs_dist = (station_structure->velocity*station_structure->time_acs)/2000; /* трапецивидный профиль /‾\ => получим на ускорении прямоугольный ипеугольник, тогда v*tacs/2 */
-						//Расчитываем шаг скорости на один шаг двигателя
-						StartSpeed_count = 5000;
-						Delta_count = (StartSpeed_count - SP)/acs_dist + 1;
+					case 7:
 						//ДВИЖЕНИЕ
 						//Счетчик шагов
 					    step_counter = 0;
-					    station_structure->status = 1;
+					    if(RS485_structure->value[1] == 0){
+					    	station_structure->status = 1;//движение с ускорением
+					    }
+					    if(RS485_structure->value[1] == 1){
+					    	TIM15 -> ARR = 5000;
+							TIM15 -> CCR1 = 2500;
+							TIM15 -> CCR2 = 2500;
+					    	station_structure->status = 4; //перемещение до кооридинаты
+						}
+					    if(RS485_structure->value[1] == 2){
+							SP = 1000000/station_structure->velocity;//частота инкреммента / скорость
+							//расчет ускорения
+							//расстояние за время ускорения (шагов) - перевод в шагов в мс
+							acs_dist = (station_structure->velocity*station_structure->time_acs)/2000; /* трапецивидный профиль /‾\ => получим на ускорении прямоугольный ипеугольник, тогда v*tacs/2 */
+							//Расчитываем шаг скорости на один шаг двигателя
+							StartSpeed_count = 5000;
+							Delta_count = (StartSpeed_count - SP)/acs_dist + 1;
+							station_structure->status = 5; //перемещение по алгоритму(меандр)
+							station_structure->external_progress = 0;
+							station_structure->internal_progress = 0;
+							TIM15 -> ARR = 5000;
+							TIM15 -> CCR1 = 2500;
+							TIM15 -> CCR2 = 2500;
+						}
 						HAL_TIM_PWM_Start_IT(&htim15, TIM_CHANNEL_1);    // останавливаем ШИМ по каналу 1
 						HAL_TIM_PWM_Start_IT(&htim15, TIM_CHANNEL_2);    // останавливаем ШИМ по каналу 2
 						HAL_TIM_Base_Start_IT(&htim15);				  // Запускаем таймер
-
+						break;
+					case 8:
+						station_structure->height = RS485_TRANSMITTER.value[1] + (RS485_TRANSMITTER.value[0] * 100);
+						break;
+					case 9:
+						station_structure->width = RS485_TRANSMITTER.value[1] + (RS485_TRANSMITTER.value[0] * 100);
+						break;
+					case 0:
+						station_structure->repetition = RS485_TRANSMITTER.value[1] + (RS485_TRANSMITTER.value[0] * 100);
 						break;
 					}
-					if(RS485_structure->reg[1] != 4 && RS485_structure->reg[1] != 6 && RS485_structure->reg[1] != 8){
-						HAL_UART_Transmit(&huart4, RS485_TRANSMITTER.frame, 9, HAL_MAX_DELAY);
-						HAL_UART_Transmit(&huart4, &newline_char, 1, HAL_MAX_DELAY);
+					HAL_UART_Transmit(&huart4, RS485_TRANSMITTER.frame, 9, HAL_MAX_DELAY);
+					//HAL_UART_Transmit(&huart4, &newline_char, 1, HAL_MAX_DELAY);
+				}
+				if(RS485_structure->reg[0] == 1){ //проверяем, что первый 1 в адресе регистра
+					switch(RS485_structure->reg[1]){
+					case 0:
+						station_structure->coordinate = RS485_TRANSMITTER.value[1] + (RS485_TRANSMITTER.value[0] * 100);
+					break;
 					}
+					HAL_UART_Transmit(&huart4, RS485_TRANSMITTER.frame, 9, HAL_MAX_DELAY);
 				}
 			}
 			if(RS485_structure ->cmd[1] == 4){
@@ -697,13 +724,12 @@ uint8_t proceed(station * station_structure, cmd_uart * RS485_structure){
 						RS485_structure->frame[6]  =  station_structure->time_acs%100;
 					break;
 					case 3:
-						RS485_structure->frame[5]  =  station_structure->coordinate/100;
-						RS485_structure->frame[6]  =  station_structure->coordinate%100;
+						RS485_structure->frame[5]  =  station_structure->axis;
+						RS485_structure->frame[6]  =  station_structure->dir;
 					break;
 					case 4:
-						//RS485_structure->frame[5]  =  0;
-						//RS485_structure->frame[6]  =  station_structure->x_home + 222;
-						__NOP();
+						RS485_structure->frame[5]  =  station_structure->coordinate/100;
+						RS485_structure->frame[6]  =  station_structure->coordinate%100;
 					break;
 					case 5:
 						RS485_structure->frame[5] = 0;
@@ -714,12 +740,12 @@ uint8_t proceed(station * station_structure, cmd_uart * RS485_structure){
 						}
 					break;
 					case 6:
-						RS485_structure->frame[5]  =  0;
+						RS485_structure->frame[5]  =  station_structure->x_home;;
 						RS485_structure->frame[6]  =  station_structure->y_home;
 					break;
 					case 7:
 						RS485_structure->frame[5]  =  station_structure->axis;
-						RS485_structure->frame[6]  =  station_structure->dir;;
+						RS485_structure->frame[6]  =  station_structure->dir;
 					break;
 					case 8:
 						RS485_structure->frame[5]  = 0;
@@ -728,7 +754,7 @@ uint8_t proceed(station * station_structure, cmd_uart * RS485_structure){
 					}
 				}
 				HAL_UART_Transmit(&huart4, RS485_structure->frame, 9, HAL_MAX_DELAY);
-				HAL_UART_Transmit(&huart4, &newline_char, 1, HAL_MAX_DELAY);
+				//HAL_UART_Transmit(&huart4, &newline_char, 1, HAL_MAX_DELAY);
 			}
 		}
 	}

@@ -8,4 +8,4 @@
 ../Src/stm32f3xx_it.c:172:6:PendSV_Handler	0	static
 ../Src/stm32f3xx_it.c:185:6:SysTick_Handler	0	static
 ../Src/stm32f3xx_it.c:206:6:TIM1_BRK_TIM15_IRQHandler	24	static
-../Src/stm32f3xx_it.c:317:6:UART4_IRQHandler	16	static
+../Src/stm32f3xx_it.c:421:6:UART4_IRQHandler	16	static

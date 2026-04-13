@@ -115,10 +115,15 @@ typedef struct{
 	uint16_t coordinate; //счетчик шагов
 	uint8_t axis;        //ось 0 - Y, 1 - X
 	uint8_t dir;		 //направление 0 - +     1 - -
-	uint16_t status;    //status (какая команда выполняется)
-	uint8_t x_home;		// статус определения домашней позиции по X
-	uint8_t y_home;		// статус определения домашней позиции по Y
+	uint16_t status;     //status (какая команда выполняется)
+	uint8_t x_home;		 // статус определения домашней позиции по X
+	uint8_t y_home;		 // статус определения домашней позиции по Y
 	uint8_t cmd;
+	uint16_t height; 	//высота
+	uint16_t width;  	//ширина
+	uint8_t repetition; //повторение проходов
+	uint8_t external_progress;
+	uint8_t internal_progress;
 }station;
 extern uint8_t newline_char;
 uint8_t direction(uint8_t axis /*0-x 1-y*/, uint8_t dir);
